@@ -1,7 +1,7 @@
 /** analysis.js 자기검증. node scripts/test_analysis.mjs */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { MAX_BIRTHDAY_MONTH, analyze, grade, gradeRecord, passesFilters, popularity, recommend, RANGES, sliceDraws, weights } from "../site/analysis.js";
+import { MODEL, analyze, associations, grade, gradeRecord, passesFilters, predict, RANGES, sliceDraws } from "../site/analysis.js";
 
 const { draws, latest } = JSON.parse(fs.readFileSync(new URL("../site/data/draws.json", import.meta.url)));
 
@@ -30,40 +30,45 @@ for (const r of RANGES) {
   assert.ok(s.byNo.every((b) => b.gap >= 0 && b.gap <= s.count));
 }
 
-// 인기지수
-const pop = popularity(draws);
-assert.equal(pop.length, 46);
-assert.ok(pop.slice(1).every((v) => v > 0.5 && v < 2), `인기지수가 범위를 벗어남: ${pop.slice(1)}`);
-const bonusSeen = new Set(draws.map((d) => d.b));
-for (let nlow = 1; nlow <= 45; nlow++) {
-  if (!bonusSeen.has(nlow)) assert.equal(pop[nlow], 1, `보너스로 안 나온 번호는 1이어야 함: ${nlow}`);
+// 연관성: 리프트는 대칭이고 평균이 1 근처여야 한다
+const a2 = associations(draws);
+for (let x = 1; x <= 45; x++) {
+  for (let y = x + 1; y <= 45; y++) {
+    assert.equal(a2.pairLift[x][y], a2.pairLift[y][x], `동반출현 리프트가 비대칭: ${x},${y}`);
+  }
 }
-// 중앙값 기반이라 이상 회차 하나에 흔들리지 않아야 한다 (1057회는 2등이 664명으로 평상시의 9배)
-const spiked = popularity(draws.map((d) => (d.e === 1057 ? { ...d, w2: d.w2 * 20 } : d)));
-assert.ok(Math.abs(spiked[draws.find((d) => d.e === 1057).b] - pop[draws.find((d) => d.e === 1057).b]) < 0.05,
-  "이상 회차 하나가 인기지수를 끌고 감 — 중앙값이 아니라 통합비율을 쓰고 있음");
+const lifts = a2.topPairs.map((p) => p.lift);
+assert.ok(lifts[0] > 1 && lifts[0] < 3, `동반출현 리프트 상위값이 이상함: ${lifts[0]}`);
+const allPair = [];
+for (let x = 1; x <= 45; x++) for (let y = x + 1; y <= 45; y++) allPair.push(a2.pairLift[x][y]);
+const mp = allPair.reduce((s2, v) => s2 + v, 0) / allPair.length;
+assert.ok(Math.abs(mp - 1) < 0.02, `동반출현 리프트 평균이 1에서 벗어남: ${mp}`);
+assert.deepEqual(a2.lastDraw, draws[draws.length - 1].n);
+assert.equal(a2.recent.length, 46);
+// 반감기가 짧을수록 직전 회차 번호가 차지하는 '비중'이 커져야 한다.
+// 절대값은 반감기를 줄이면 전체 가중 합이 같이 줄어서 비교가 안 된다.
+const shortHL = associations(draws, { halfLife: 20 });
+const share = (as, no) => as.recent[no] / as.recent.slice(1).reduce((x, y) => x + y, 0);
+for (const no of draws[draws.length - 1].n) {
+  assert.ok(share(shortHL, no) > share(a2, no),
+    `반감기를 줄였는데 직전 회차 번호 ${no}의 비중이 커지지 않음`);
+}
 
-// 가중치 모드
-assert.ok(weights(draws, "uniform").slice(1).every((v) => v === 1));
-const wu = weights(draws, "unpopular");
-const least = pop.indexOf(Math.min(...pop.slice(1)));
-const most = pop.indexOf(Math.max(...pop.slice(1)));
-assert.ok(wu[least] > wu[most], "비인기 번호가 더 높은 가중치를 받아야 함");
-
-// 혼잡 필터: 1~12 를 3개 이상 포함하면 탈락
-assert.equal(passesFilters([1, 2, 3, 20, 30, 40], analyze(draws)), false, "1~12 3개짜리가 통과함");
-
-// 추천: 개수·중복·필터·재현성
+// 예상번호: 개수·중복·필터·재현성
 const stats = analyze(draws);
-const a = recommend(draws, { seed: 1241 });
+const a = predict(draws, { seed: 1241 });
 assert.equal(a.length, 5);
 assert.equal(new Set(a.map((r) => r.numbers.join())).size, 5, "세트가 중복됨");
 assert.ok(a.every((r) => r.numbers.length === 6 && new Set(r.numbers).size === 6));
+assert.ok(a.every((r) => r.numbers.every((v) => v >= 1 && v <= 45)));
+assert.ok(a.every((r) => r.numbers.every((v, i2, arr) => i2 === 0 || arr[i2 - 1] < v)), "정렬 안 됨");
 assert.ok(a.every((r) => passesFilters(r.numbers, stats)), "필터를 통과하지 못한 세트");
-assert.ok(a.every((r) => r.numbers.filter((v) => v <= 12).length <= MAX_BIRTHDAY_MONTH),
-  "추천 세트가 1~12 제한을 어김");
-assert.deepEqual(recommend(draws, { seed: 1241 }), a, "같은 시드인데 결과가 다름");
-assert.notDeepEqual(recommend(draws, { seed: 1242 }), a, "시드가 달라도 결과가 같음");
+assert.deepEqual(predict(draws, { seed: 1241 }), a, "같은 시드인데 결과가 다름");
+assert.notDeepEqual(predict(draws, { seed: 1242 }), a, "시드가 달라도 결과가 같음");
+// 모델을 꺼도(temperature 0) 유효한 세트가 나와야 한다 = 필터가 모델과 독립
+const flat = predict(draws, { seed: 1241, model: { ...MODEL, temperature: 0 } });
+assert.equal(flat.length, 5);
+assert.ok(flat.every((r) => passesFilters(r.numbers, stats)));
 
 // 채점: 마지막 회차를 정답으로 넣고 자기 자신을 맞히면 1등
 const last = draws[draws.length - 1];
@@ -71,4 +76,4 @@ const rec = gradeRecord({ target: last.e, sets: [{ numbers: last.n }, { numbers:
 assert.equal(rec.result.bestRank, 1);
 assert.equal(rec.result.bestMatch, 6);
 
-console.log(`OK ${latest}회 기준 통계·추천·채점 검증 통과`);
+console.log(`OK ${latest}회 기준 통계·연관성·예상번호·채점 검증 통과`);

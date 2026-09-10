@@ -31,13 +31,10 @@ jobs:
       - name: 수집 데이터 검증 (동행복권 공식 통계와 대조)
         run: python3 scripts/test_draws.py
 
-      - name: 예측 가능성 검정
-        run: python3 scripts/independence.py
-
-      - name: 통계·인기지수·추천·채점 로직 검증
+      - name: 통계·연관성·예상번호·채점 로직 검증
         run: node scripts/test_analysis.mjs
 
-      - name: 추천 채점 및 다음 회차 추천 생성
+      - name: 예상번호 채점 및 다음 회차 생성
         run: node scripts/update.mjs
 
       - name: 변경분 커밋

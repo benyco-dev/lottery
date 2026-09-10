@@ -139,3 +139,10 @@ footer .src { margin-top: 8px; font-size: .75rem; }
 .reroll { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 .cell .fill.pop { background: var(--over); }
 .cell .fill.unpop { background: var(--under); }
+
+/* 연관성 쌍 목록 */
+.pairs { display: flex; flex-direction: column; gap: 7px; }
+.pairs .p { display: flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.pairs .p .arrow { color: var(--dim); margin: 0 1px; }
+.pairs .p .v { margin-left: auto; }
+.pairs .p .lift { color: var(--accent); font-weight: 600; }

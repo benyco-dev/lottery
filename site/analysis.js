@@ -1,9 +1,9 @@
 /**
- * 로또 6/45 통계·추천 도메인 로직.
- * 순수 함수만 둔다 — DOM, fetch, 전역 상태 없음. Node/브라우저 양쪽에서 그대로 돈다.
+ * 로또 6/45 — 과거 1등 당첨번호의 연관성 분석과 다음 회차 번호 생성.
+ * 순수 함수만 둔다: DOM, fetch, 전역 상태 없음. Node/브라우저 양쪽에서 그대로 돈다.
  */
 
-/** 사용자가 요청한 5개 분석 구간. size=null 은 첫 회차부터 전부. */
+/** 통계 탭의 분석 구간. size=null 은 첫 회차부터 전부. */
 export const RANGES = [
   { key: "all", label: "전체", size: null },
   { key: "r500", label: "최근 500회", size: 500 },
@@ -19,6 +19,7 @@ export const ballColor = (n) =>
 export const sliceDraws = (draws, size) => (size ? draws.slice(-size) : draws);
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
+const mean = (a) => sum(a) / a.length;
 
 function percentile(sorted, p) {
   const i = (sorted.length - 1) * p;
@@ -26,13 +27,20 @@ function percentile(sorted, p) {
   return sorted[lo] + (sorted[Math.ceil(i)] - sorted[lo]) * (i - lo);
 }
 
-/** 한 구간의 당첨번호 통계. 보너스 번호는 제외한다(공식 통계와 동일 기준). */
+/** 값 배열을 평균 0, 표준편차 1로. 편차가 없으면 전부 0. */
+function zscore(values) {
+  const m = mean(values);
+  const sd = Math.sqrt(mean(values.map((v) => (v - m) ** 2))) || 1;
+  return values.map((v) => (v - m) / sd);
+}
+
+/** 한 구간의 당첨번호 통계. 보너스는 제외한다(공식 통계와 같은 기준). */
 export function analyze(draws) {
   const n = draws.length;
   const freq = Array(46).fill(0);
-  const lastSeen = Array(46).fill(null); // 마지막 출현 이후 지난 회차 수
-  const decades = Array(5).fill(0); // 1-10, 11-20, 21-30, 31-40, 41-45
-  const oddCounts = Array(7).fill(0); // 세트당 홀수 개수 분포
+  const lastSeen = Array(46).fill(null);
+  const decades = Array(5).fill(0);
+  const oddCounts = Array(7).fill(0);
   const sums = [];
   let consecutiveDraws = 0;
 
@@ -51,13 +59,12 @@ export function analyze(draws) {
     if (hasPair) consecutiveDraws++;
   });
 
-  const expected = (n * 6) / 45; // 균등분포일 때 번호당 기대 출현 횟수
+  const expected = (n * 6) / 45;
   const byNo = [];
   for (let v = 1; v <= 45; v++) {
     byNo.push({
       no: v,
       count: freq[v],
-      // 기대치 대비 편차(%). 표본이 작으면 크게 흔들리는 값이라 참고용이다.
       dev: expected ? ((freq[v] - expected) / expected) * 100 : 0,
       gap: lastSeen[v] === null ? n : lastSeen[v],
     });
@@ -79,7 +86,7 @@ export function analyze(draws) {
     oddRatio: sum(draws.map((d) => d.n.filter((v) => v % 2).length)) / (n * 6),
     consecutiveRate: consecutiveDraws / n,
     sum: {
-      avg: sum(sums) / n,
+      avg: mean(sums),
       min: sortedSums[0],
       max: sortedSums[n - 1],
       p10: Math.round(percentile(sortedSums, 0.1)),
@@ -89,52 +96,83 @@ export function analyze(draws) {
 }
 
 /**
- * 번호별 인기지수. 1.0 = 평균, 1보다 크면 사람들이 더 많이 고르는 번호다.
- *
- * 5개를 맞힌 티켓의 나머지 한 개가 보너스일 확률은 이론상 1/39 로 고정이다(남은 39개 중 1개).
- * 따라서 w2/(w2+w3) 가 1/39 를 넘으면 그 회차 보너스 번호가 평균보다 인기 있었다는 뜻이다.
- * 이건 당첨 확률과 무관하다 — 당첨됐을 때 몇 명과 나눠 갖는지만 바꾼다.
- *
- * 회차별 지수의 중앙값을 쓴다. 통합비율은 이상 회차 하나에 끌려간다
- * (1057회는 2등이 664명으로 평상시의 9배였고, 그 회차 하나가 12번 지수를 1.05 → 1.47 로 올렸다).
+ * 모델 가중치. 네 가지 연관성을 어떤 비율로 섞을지.
+ * temperature 가 클수록 점수 높은 번호에 몰아준다.
  */
-export function popularity(draws) {
-  const P = 1 / 39;
-  const per = new Map();
-  for (const d of draws) {
-    const tot = (d.w2 ?? 0) + (d.w3 ?? 0);
-    if (!tot || d.b == null) continue;
-    if (!per.has(d.b)) per.set(d.b, []);
-    per.get(d.b).push(d.w2 / tot / P);
-  }
-  const out = Array(46).fill(1);
-  for (const [no, v] of per) {
-    v.sort((a, b) => a - b);
-    const m = v.length >> 1;
-    out[no] = v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
-  }
-  return out; // 보너스로 한 번도 안 나온 번호는 1(평균)로 둔다
-}
+export const MODEL = {
+  halfLife: 300, // 최근 가중 빈도의 반감기 (회차)
+  recent: 1.0,   // 최근 얼마나 자주 나왔나
+  gap: 0.6,      // 얼마나 오래 안 나왔나
+  transition: 0.8, // 직전 회차 번호에서 이어질 확률
+  pair: 1.4,     // 이미 고른 번호와 얼마나 자주 같이 나왔나
+  temperature: 0.35,
+};
 
 /**
- * 번호별 추출 가중치.
- *  - "unpopular": 인기지수의 역수. 당첨 확률은 그대로고 당첨 시 배당이 올라간다. (기본)
- *  - "frequency": 과거 출현 빈도. 백테스트에서 효과가 없다고 확인됐고 비교용으로만 남긴다.
- *  - "uniform"  : 대조군.
+ * 과거 1등 번호에서 네 가지 연관성을 뽑는다. 전부 '리프트'(관측/기대) 형태라 1.0 이 기준선이다.
+ *
+ *  pairLift[a][b]  두 번호가 같은 회차에 함께 나온 정도
+ *  transLift[a][b] a 가 나온 다음 회차에 b 가 나온 정도
+ *  recent[n]       반감기 가중 출현 빈도
+ *  gap[n]          마지막 출현 이후 지난 회차 수 / 기대 간격(7.5)
  */
-export function weights(draws, mode = "unpopular", strength = 3) {
-  const w = Array(46).fill(1);
-  if (mode === "uniform") return w;
-  if (mode === "frequency") {
-    for (const { no, count } of analyze(draws).byNo) w[no] = count + 1;
-    return w;
+export function associations(draws, { halfLife = MODEL.halfLife } = {}) {
+  const n = draws.length;
+  const latest = draws[n - 1].e;
+
+  const freq = Array(46).fill(0);
+  const recent = Array(46).fill(0);
+  const pair = Array.from({ length: 46 }, () => Array(46).fill(0));
+  const trans = Array.from({ length: 46 }, () => Array(46).fill(0));
+
+  draws.forEach((d, i) => {
+    const w = Math.pow(0.5, (latest - d.e) / halfLife);
+    for (const a of d.n) {
+      freq[a]++;
+      recent[a] += w;
+      for (const b of d.n) if (a !== b) pair[a][b]++;
+    }
+    const next = draws[i + 1];
+    if (next) for (const a of d.n) for (const b of next.n) trans[a][b]++;
+  });
+
+  // 리프트로 정규화한다. 기대 동반출현 = n * (6*5)/(45*44), 기대 전이 = freq[a] * 6/45.
+  const pairExp = (n * 30) / (45 * 44);
+  const pairLift = Array.from({ length: 46 }, () => Array(46).fill(1));
+  const transLift = Array.from({ length: 46 }, () => Array(46).fill(1));
+  for (let a = 1; a <= 45; a++) {
+    const tExp = (freq[a] * 6) / 45;
+    for (let b = 1; b <= 45; b++) {
+      if (a !== b) pairLift[a][b] = pair[a][b] / pairExp;
+      if (tExp > 0) transLift[a][b] = trans[a][b] / tExp;
+    }
   }
-  const pop = popularity(draws);
-  for (let n = 1; n <= 45; n++) w[n] = Math.pow(1 / pop[n], strength);
-  return w;
+
+  const gapRaw = analyze(draws).byNo.map((b) => b.gap / 7.5);
+
+  const flat = [];
+  for (let a = 1; a <= 45; a++) for (let b = a + 1; b <= 45; b++) flat.push({ a, b, lift: pairLift[a][b], count: pair[a][b] });
+  flat.sort((x, y) => y.lift - x.lift);
+
+  const tflat = [];
+  for (let a = 1; a <= 45; a++) for (let b = 1; b <= 45; b++) tflat.push({ a, b, lift: transLift[a][b], count: trans[a][b] });
+  tflat.sort((x, y) => y.lift - x.lift);
+
+  return {
+    count: n,
+    latest,
+    freq,
+    recent,
+    gap: gapRaw,
+    pairLift,
+    transLift,
+    topPairs: flat.slice(0, 10),
+    topTransitions: tflat.slice(0, 10),
+    lastDraw: draws[n - 1].n,
+  };
 }
 
-/** 시드 고정 PRNG (mulberry32). 같은 시드 → 같은 추천, 즉 결과가 재현된다. */
+/** 시드 고정 PRNG (mulberry32). 같은 시드 → 같은 결과, 즉 재현된다. */
 export function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -145,37 +183,24 @@ export function rng(seed) {
   };
 }
 
-/** 해당 구간의 출현 빈도에 비례해 번호 6개를 비복원 추출한다. */
-function drawWeighted(weights, rand) {
-  const pool = weights.map((w, i) => ({ no: i, w })).slice(1);
-  const picked = [];
-  for (let k = 0; k < 6; k++) {
-    let total = pool.reduce((s, p) => s + p.w, 0);
-    let r = rand() * total;
-    let idx = pool.length - 1;
-    for (let i = 0; i < pool.length; i++) {
-      r -= pool[i].w;
-      if (r <= 0) { idx = i; break; }
-    }
-    picked.push(pool[idx].no);
-    pool.splice(idx, 1);
-  }
-  return picked.sort((a, b) => a - b);
+/**
+ * 이미 고른 번호와 무관한 부분의 점수 (z 점수 합).
+ * 최근 빈도 + 미출현 기간 + 직전 회차로부터의 전이.
+ */
+export function baseScore(assoc, model = MODEL) {
+  const idx = [...Array(45)].map((_, i) => i + 1);
+  const zRecent = zscore(idx.map((n) => assoc.recent[n]));
+  const zGap = zscore(idx.map((n) => assoc.gap[n - 1]));
+  const zTrans = zscore(idx.map((n) => mean(assoc.lastDraw.map((a) => assoc.transLift[a][n]))));
+  const out = Array(46).fill(0);
+  idx.forEach((n, i) => {
+    out[n] = model.recent * zRecent[i] + model.gap * zGap[i] + model.transition * zTrans[i];
+  });
+  return out;
 }
 
-/**
- * 조합 필터. 두 종류가 섞여 있다.
- *  - 구조 필터: 과거 당첨 조합이 실제로 가지는 성질에서 크게 벗어난 조합을 뺀다.
- *  - 혼잡 필터: 1~12 를 최대 2개로 제한한다. 사람들이 생일 월에 몰리기 때문이다.
- *
- * 1~12 제한은 실측이다. 이 조건을 만족한 회차(1024회)는 위반한 회차보다
- * 1등 당첨자가 평균 12.7% 적었다 (부트스트랩 95% CI +3.7~22.4%, 판매액 정규화 기준).
- * 당첨 확률은 바뀌지 않는다 — 당첨됐을 때 나눠 갖는 인원만 줄어든다.
- */
-export const MAX_BIRTHDAY_MONTH = 2;
-
+/** 과거 당첨 조합이 실제로 가지는 구조적 성질. 여기서 크게 벗어난 조합을 걸러낸다. */
 export function passesFilters(set, stats) {
-  if (set.filter((v) => v <= 12).length > MAX_BIRTHDAY_MONTH) return false;
   const total = sum(set);
   if (total < stats.sum.p10 || total > stats.sum.p90) return false;
   const odd = set.filter((v) => v % 2).length;
@@ -187,21 +212,51 @@ export function passesFilters(set, stats) {
   return spread.size >= 3;
 }
 
+/** 점수 배열에서 가중 추출로 번호 하나를 고른다. */
+function pick(scores, taken, rand, temperature) {
+  const cand = [];
+  let total = 0;
+  for (let n = 1; n <= 45; n++) {
+    if (taken.has(n)) continue;
+    const w = Math.exp(temperature * scores[n]);
+    cand.push([n, w]);
+    total += w;
+  }
+  let r = rand() * total;
+  for (const [n, w] of cand) {
+    r -= w;
+    if (r <= 0) return n;
+  }
+  return cand[cand.length - 1][0];
+}
+
 /**
- * 추천 6자리 세트를 만든다.
+ * 다음 회차 예상번호를 만든다.
  *
- * 당첨 확률은 어떤 조합이든 8,145,060분의 1로 같다 — 이건 예측이 아니다.
- * 기본 모드는 사람들이 덜 고르는 번호에 가중치를 줘서, 1등이 됐을 때
- * 나눠 갖는 인원을 줄이는 것을 목표로 한다. 여기에 과거 조합의 구조 필터를 얹는다.
+ * 번호를 하나씩 뽑되, 뽑을 때마다 '이미 고른 번호와의 동반출현 리프트'를 점수에 더한다.
+ * 그래서 세트 안의 6개가 서로 연관된 조합이 된다. 마지막에 구조 필터를 통과한 것만 남긴다.
  */
-export function recommend(draws, { seed = 1, sets = 5, mode = "unpopular", strength = 3, stats, w } = {}) {
+export function predict(draws, { seed = 1, sets = 5, model = MODEL, assoc, stats } = {}) {
+  assoc ??= associations(draws, model);
   stats ??= analyze(draws);
-  w ??= weights(draws, mode, strength);
+  const base = baseScore(assoc, model);
   const rand = rng(seed);
+
   const out = [];
   const seen = new Set();
   for (let guard = 0; out.length < sets && guard < 20000; guard++) {
-    const set = drawWeighted(w, rand);
+    const taken = new Set();
+    for (let k = 0; k < 6; k++) {
+      const scores = Array(46).fill(-Infinity);
+      const picked = [...taken];
+      // 동반출현 리프트도 z 로 맞춰야 base 와 같은 축척에서 더할 수 있다.
+      const affinity = [...Array(45)].map((_, i) =>
+        picked.length ? mean(picked.map((p) => assoc.pairLift[p][i + 1])) : 0);
+      const zAff = picked.length ? zscore(affinity) : affinity;
+      for (let n = 1; n <= 45; n++) scores[n] = base[n] + model.pair * zAff[n - 1];
+      taken.add(pick(scores, taken, rand, model.temperature));
+    }
+    const set = [...taken].sort((a, b) => a - b);
     const key = set.join(",");
     if (seen.has(key) || !passesFilters(set, stats)) continue;
     seen.add(key);
@@ -222,7 +277,7 @@ export function grade(picked, winning, bonus) {
 
 export const RANK_LABEL = ["낙첨", "1등", "2등", "3등", "4등", "5등"];
 
-/** 예측 1건(5세트)을 실제 당첨번호로 채점한다. best 는 가장 높은 등수(작을수록 좋음). */
+/** 예상번호 1건(5세트)을 실제 당첨번호로 채점한다. */
 export function gradeRecord(record, draw) {
   const sets = record.sets.map((s) => ({ ...s, ...grade(s.numbers, draw.n, draw.b) }));
   const won = sets.filter((s) => s.rank > 0).map((s) => s.rank);

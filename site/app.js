@@ -1,7 +1,7 @@
 /**
  * 화면 렌더링 전담. 통계·추천·채점 계산은 전부 analysis.js 에 있고 여기서는 그리기만 한다.
  */
-import { RANGES, RANK_LABEL, analyze, ballColor, popularity, recommend, sliceDraws } from "./analysis.js";
+import { MODEL, RANGES, RANK_LABEL, analyze, associations, ballColor, baseScore, predict, sliceDraws } from "./analysis.js";
 
 const $ = (id) => document.getElementById(id);
 const fmtDate = (ymd) => `${ymd.slice(0, 4)}.${ymd.slice(4, 6)}.${ymd.slice(6)}`;
@@ -64,47 +64,42 @@ function rankList(host, items, unit) {
   }));
 }
 
-/** 독립성 검정 결과표. 매주 다시 계산된 값을 그대로 보여준다. */
-function renderIndependence(ind) {
-  const sig = ind.tests.filter((t) => t.p < ind.alpha);
-  const v = $("indepVerdict");
-  v.className = `verdict ${sig.length ? "some" : "null"}`;
-  v.textContent = sig.length
-    ? `${ind.tests.length}개 검정 중 ${sig.length}개가 유의합니다: ${sig.map((t) => t.name).join(", ")}`
-    : `${ind.tests.length}개 검정 전부 무의미 — 회차 사이에 이용할 만한 규칙이 없습니다`;
-  $("indepAlpha").textContent = `${ind.draws}회차 · 본페로니 보정 유의수준 α = ${ind.alpha}`;
-  $("indepTable").innerHTML =
-    `<thead><tr><th>검정</th><th>관측</th><th>기대</th><th>p</th><th>판정</th></tr></thead><tbody>` +
-    ind.tests.map((t) => `<tr><td>${t.name}<div class="k note" style="margin:2px 0 0">${t.desc}</div></td>` +
-      `<td>${t.obs}</td><td>${t.exp}</td><td>${t.p.toFixed(4)}</td>` +
-      `<td class="${t.p < ind.alpha ? "sig" : "ok"}">${t.p < ind.alpha ? "유의" : "무의미"}</td></tr>`).join("") +
-    `</tbody>`;
+/** 번호쌍 목록 한 줄. arrow 를 주면 a → b 방향으로 표시한다. */
+function pairRow({ a, b, count, lift }, arrow) {
+  const el = document.createElement("div");
+  el.className = "p";
+  el.append(ball(a, { small: true }));
+  if (arrow) el.insertAdjacentHTML("beforeend", `<span class="arrow">→</span>`);
+  el.append(ball(b, { small: true }));
+  el.insertAdjacentHTML("beforeend",
+    `<span class="v">${count}회 · <span class="lift">×${lift.toFixed(2)}</span></span>`);
+  return el;
 }
 
-/** 번호별 인기지수. 1.0 이 평균이고, 낮을수록 사람들이 안 고르는 = 우리가 원하는 번호다. */
-function renderPopularity(pop) {
-  const dev = pop.slice(1).map((v) => v - 1);
-  const maxDev = Math.max(...dev.map(Math.abs), 0.01);
-  $("popGrid").replaceChildren(...dev.map((d, i) => {
+/** 모델이 쓰는 네 가지 연관성과, 그 결과 나온 번호별 종합 점수. */
+function renderAssociations(assoc, scores) {
+  $("modelParts").innerHTML = [
+    ["최근 빈도", MODEL.recent, `반감기 ${MODEL.halfLife}회 가중`],
+    ["미출현 기간", MODEL.gap, "기대 간격 7.5회 대비"],
+    ["직전 회차 전이", MODEL.transition, "직전 번호 다음에 온 번호"],
+    ["동반출현", MODEL.pair, "이미 고른 번호와의 궁합"],
+  ].map(([k, w, s2]) => `<div class="metric"><div class="k">${k}</div><div class="v">${w.toFixed(1)}<small> 가중</small></div><div class="k">${s2}</div></div>`).join("");
+
+  $("topPairs").replaceChildren(...assoc.topPairs.map((p) => pairRow(p, false)));
+  $("topTrans").replaceChildren(...assoc.topTransitions.map((p) => pairRow(p, true)));
+  $("lastDrawNote").textContent = `직전 ${assoc.latest}회 당첨번호: ${assoc.lastDraw.join(", ")}`;
+
+  const max = Math.max(...scores.slice(1).map(Math.abs), 0.01);
+  $("scoreGrid").replaceChildren(...scores.slice(1).map((v, i) => {
     const no = i + 1;
     const cell = document.createElement("div");
     cell.className = "cell";
-    cell.title = `${no}번 · 인기지수 ${pop[no].toFixed(3)} (평균 1.000) · ${d >= 0 ? "인기, 피할 번호" : "비인기, 고를 번호"}`;
-    cell.innerHTML = `<div class="track"><div class="fill ${d >= 0 ? "pop" : "unpop"}" style="height:${Math.max(2, (Math.abs(d) / maxDev) * 30)}px"></div></div>`;
+    cell.title = `${no}번 · 종합 점수 ${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
+    cell.innerHTML = `<div class="track"><div class="fill ${v >= 0 ? "over" : "under"}" style="height:${Math.max(2, (Math.abs(v) / max) * 30)}px"></div></div>`;
     cell.append(ball(no, { small: true }));
-    cell.insertAdjacentHTML("beforeend", `<div class="n">${pop[no].toFixed(2)}</div>`);
+    cell.insertAdjacentHTML("beforeend", `<div class="n">${v >= 0 ? "+" : ""}${v.toFixed(1)}</div>`);
     return cell;
   }));
-
-  const band = (lo, hi) => {
-    const v = pop.slice(lo, hi + 1);
-    return v.reduce((a, b) => a + b, 0) / v.length;
-  };
-  $("popBands").innerHTML = [
-    ["1~12번", band(1, 12), "생일의 '월'. 가장 붐빔"],
-    ["13~31번", band(13, 31), "생일의 '일'"],
-    ["32~45번", band(32, 45), "생일에 없는 번호. 가장 한산"],
-  ].map(([k, v, s]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v.toFixed(3)}</div><div class="k">${s}</div></div>`).join("");
 }
 
 function renderStats(stats) {
@@ -140,12 +135,12 @@ function renderStats(stats) {
   })));
 }
 
-/** 채점이 끝난 가장 최근 예측을 메인 배너에 띄운다. */
+/** 채점이 끝난 가장 최근 예상번호를 메인 배너에 띄운다. */
 function renderScorecard(records, nextTarget) {
   const rec = records.find((r) => r.result);
   const body = $("scoreBody");
   if (!rec) {
-    body.innerHTML = `<p class="empty">아직 채점된 예측이 없습니다. ${nextTarget}회 추첨 결과가 나오면 여기에 성적이 표시됩니다.</p>`;
+    body.innerHTML = `<p class="empty">아직 채점된 예상번호가 없습니다. ${nextTarget}회 추첨 결과가 나오면 여기에 성적이 표시됩니다.</p>`;
     return;
   }
   const { result } = rec;
@@ -191,10 +186,9 @@ function renderHistory(records) {
 }
 
 async function main() {
-  const [draws, preds, ind] = await Promise.all([
+  const [draws, preds] = await Promise.all([
     fetch("data/draws.json").then((r) => r.json()),
     fetch("data/predictions.json").then((r) => r.json()),
-    fetch("data/independence.json").then((r) => r.json()),
   ]);
 
   const latestDraw = draws.draws[draws.draws.length - 1];
@@ -205,11 +199,14 @@ async function main() {
   const pending = preds.records.find((r) => !r.result);
   $("predTarget").textContent = pending ? `${pending.target}회` : "";
   renderSets($("predSets"), pending ? pending.sets : []);
-  if (!pending) $("predSets").innerHTML = `<p class="empty">다음 회차 예측이 아직 생성되지 않았습니다.</p>`;
+  if (!pending) $("predSets").innerHTML = `<p class="empty">다음 회차 예상번호가 아직 생성되지 않았습니다.</p>`;
   renderScorecard(preds.records, pending?.target ?? draws.latest + 1);
   renderHistory(preds.records);
-  renderIndependence(ind);
-  renderPopularity(popularity(draws.draws));
+
+  // 모델이 실제로 쓰는 값 그대로 화면에 그린다 (update.mjs 와 같은 코드).
+  const assoc = associations(draws.draws);
+  const stats = analyze(draws.draws);
+  renderAssociations(assoc, baseScore(assoc));
 
   const select = (range) => {
     [...$("tabs").children].forEach((b) => b.setAttribute("aria-selected", String(b.dataset.key === range.key)));
@@ -224,9 +221,9 @@ async function main() {
     b.onclick = () => select(r);
     return b;
   }));
-  // 추천은 항상 전체 이력 기준이다 — 인기지수는 구간을 자르면 표본이 모자란다.
+  // 예상번호는 항상 전체 이력 기준이다. 통계 탭의 구간은 관측용이다.
   $("reroll").onclick = () =>
-    renderSets($("rerollSets"), recommend(draws.draws, { seed: (Math.random() * 2 ** 31) | 0 }));
+    renderSets($("rerollSets"), predict(draws.draws, { seed: (Math.random() * 2 ** 31) | 0, assoc, stats }));
 
   select(RANGES[0]);
   $("main").hidden = false;

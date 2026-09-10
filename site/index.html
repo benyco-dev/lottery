@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>로또 6/45 회차 통계</title>
-<meta name="description" content="동행복권 로또 6/45 전 회차를 분석해 예측 가능성을 검정하고, 사람들이 덜 고르는 번호 조합을 추천해 당첨 시 배당을 높입니다.">
+<meta name="description" content="동행복권 로또 6/45 전 회차 1등 당첨번호의 연관성을 분석해 다음 회차 예상번호 6자리 5세트를 뽑습니다.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23fbc400'/></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -22,32 +22,39 @@
   </section>
 
   <section class="card">
-    <h2 class="eyebrow">이번 회차 추천 <span class="tag" id="predTarget"></span></h2>
-    <p class="note">당첨 확률을 높이는 조합이 아닙니다. <strong>사람들이 덜 고르는 번호</strong>로 뽑아서, 1등이 됐을 때 나눠 갖는 인원을 줄이는 것이 목표입니다. 시드가 회차번호에 묶여 있어 추첨 전에 기록되고 이후 바뀌지 않습니다.</p>
+    <h2 class="eyebrow">다음 회차 예상번호 <span class="tag" id="predTarget"></span></h2>
+    <p class="note">과거 1등 번호에서 뽑은 네 가지 연관성으로 번호를 하나씩 이어 붙여 만든 6자리 5세트입니다. 시드가 회차번호에 묶여 있어 추첨 전에 기록되고 이후 바뀌지 않습니다.</p>
     <div id="predSets" class="sets"></div>
     <div class="reroll">
       <button id="reroll" type="button">다른 조합 5세트 뽑기</button>
-      <span class="note" style="margin:0">같은 방식, 시드만 새로. 기록에는 남지 않습니다.</span>
+      <span class="note" style="margin:0">같은 모델, 시드만 새로. 기록에는 남지 않습니다.</span>
     </div>
     <div id="rerollSets" class="sets"></div>
   </section>
 
   <section class="card">
-    <h2 class="eyebrow">왜 '예측'이 아닌가 — 독립성 검정</h2>
-    <p class="note">회차 사이에 이용할 만한 규칙이 있는지 매주 다시 검정합니다. <span id="indepAlpha"></span></p>
-    <p class="verdict" id="indepVerdict"></p>
-    <div class="tablewrap"><table class="tbl" id="indepTable"></table></div>
+    <h2 class="eyebrow">모델 구성</h2>
+    <p class="note">번호마다 아래 네 점수를 z점수로 맞춰 더한 뒤, 높은 번호가 더 자주 뽑히게 가중 추출합니다. 여섯 번째까지 하나씩 뽑으며 <b>이미 고른 번호와의 동반출현</b>을 매번 다시 계산합니다.</p>
+    <div class="metrics" id="modelParts"></div>
   </section>
 
+  <div class="row">
+    <section class="card">
+      <h2 class="eyebrow">가장 자주 함께 나온 번호쌍</h2>
+      <p class="note">리프트 = 실제 동반출현 ÷ 기대 동반출현</p>
+      <div class="pairs" id="topPairs"></div>
+    </section>
+    <section class="card">
+      <h2 class="eyebrow">직전 회차 → 다음 회차 전이</h2>
+      <p class="note" id="lastDrawNote"></p>
+      <div class="pairs" id="topTrans"></div>
+    </section>
+  </div>
+
   <section class="card">
-    <h2 class="eyebrow">번호별 인기지수</h2>
-    <p class="note">
-      5개를 맞힌 티켓의 나머지 한 개가 보너스일 확률은 이론상 <b>1/39</b>로 고정입니다.
-      2등과 3등 당첨자 수의 비율이 이 값보다 크면 그 번호를 사람들이 더 많이 골랐다는 뜻입니다.
-      <span class="sw over"></span> 인기(피할 번호) · <span class="sw under"></span> 비인기(고를 번호)
-    </p>
-    <div class="grid" id="popGrid"></div>
-    <div class="metrics" id="popBands"></div>
+    <h2 class="eyebrow">이번 회차 번호별 점수</h2>
+    <p class="note">모델이 매긴 종합 점수입니다. <span class="sw over"></span> 높음 · <span class="sw under"></span> 낮음</p>
+    <div class="grid" id="scoreGrid"></div>
   </section>
 
   <nav class="tabs" id="tabs" aria-label="분석 구간"></nav>
@@ -59,7 +66,7 @@
 
   <section class="card">
     <h2 class="eyebrow">번호별 출현</h2>
-    <p class="note">막대는 균등분포 기대치 대비 편차입니다. 위 검정에서 확인했듯 이 편차는 통계적으로 무작위와 구별되지 않으며, 추천에는 쓰이지 않습니다.</p>
+    <p class="note">막대는 균등분포 기대치 대비 편차입니다.</p>
     <div class="grid" id="numberGrid"></div>
   </section>
 
@@ -90,16 +97,12 @@
   </div>
 
   <section class="card">
-    <h2 class="eyebrow">추천 기록</h2>
+    <h2 class="eyebrow">예상번호 기록</h2>
     <div id="history"></div>
   </section>
 
   <footer>
-    <p><strong>로또는 매 회차 독립시행입니다.</strong> 과거 번호로 다음 번호를 맞힐 수 없고, 이 사이트도 맞히려 하지 않습니다.
-    어떤 조합이든 1등 확률은 8,145,060분의 1로 같습니다.</p>
-    <p>이 사이트가 바꾸는 건 확률이 아니라 <em>당첨됐을 때 몇 명과 나눠 갖는지</em>입니다.
-    실제 회차 기준으로 1~12번을 2개 이하로 포함한 회차는 그렇지 않은 회차보다 1등 당첨자가 평균 12.7% 적었습니다
-    (부트스트랩 95% CI +3.7~22.4%, 판매액 정규화). 그래도 환급률이 50%라 <strong>기대수익은 여전히 마이너스입니다.</strong></p>
+    <p>로또는 매 회차 독립시행이라 어떤 조합이든 1등 확률은 8,145,060분의 1로 같습니다. 재미로만 보세요.</p>
     <p class="src">데이터 출처: 동행복권 · <span id="updated"></span></p>
   </footer>
 </main>

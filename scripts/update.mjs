@@ -1,11 +1,11 @@
 /**
- * 예측 기록 갱신. draws.json 을 읽어서
- *  1) 이미 추첨이 끝난 예측을 채점하고
- *  2) 다음 회차 예측이 없으면 새로 만들어 덧붙인다.
+ * 예상번호 기록 갱신. draws.json 을 읽어서
+ *  1) 이미 추첨이 끝난 예상번호를 채점하고
+ *  2) 다음 회차 예상번호가 없으면 새로 만들어 덧붙인다.
  * 멱등이라 여러 번 돌려도 결과가 같다. node scripts/update.mjs
  */
 import fs from "node:fs";
-import { gradeRecord, recommend } from "../site/analysis.js";
+import { associations, analyze, gradeRecord, predict } from "../site/analysis.js";
 
 const DRAWS = new URL("../site/data/draws.json", import.meta.url);
 const PREDS = new URL("../site/data/predictions.json", import.meta.url);
@@ -22,21 +22,21 @@ function nextSaturday(ymd) {
 }
 
 /**
- * target 회차 추천 5세트.
+ * target 회차 예상번호 5세트.
  *
- * 전체 이력으로 뽑는다 — 인기지수는 번호당 보너스 출현이 20회 넘게 쌓여야 안정되므로
- * 구간을 잘라 쓸 수 없다(통계 탭의 5개 구간은 관측용으로 그대로 남아 있다).
- * 시드가 회차번호에 묶여 있어 누구든 같은 코드로 같은 결과를 재현할 수 있다.
+ * target 회차 이전 데이터만으로 연관성을 다시 뽑아 생성한다 — 미래 데이터를 쓰지 않는다.
+ * 시드가 회차번호라 같은 코드로 누구나 같은 결과를 재현할 수 있다.
  */
-function predict(target) {
-  const history = draws.filter((d) => d.e < target); // 미래 데이터를 절대 쓰지 않는다
+function makeRecord(target) {
+  const history = draws.filter((d) => d.e < target);
+  const assoc = associations(history);
+  const stats = analyze(history);
   return {
     target,
     basedOn: history[history.length - 1].e,
     drawDate: nextSaturday(history[history.length - 1].d),
     createdAt: new Date().toISOString().slice(0, 10),
-    mode: "unpopular",
-    sets: recommend(history, { seed: target, sets: 5 }).map((s, i) => ({
+    sets: predict(history, { seed: target, sets: 5, assoc, stats }).map((s, i) => ({
       label: `세트 ${i + 1}`,
       numbers: s.numbers,
       sum: s.sum,
@@ -56,7 +56,7 @@ store.records = store.records.map((rec) => {
 
 const target = latest + 1;
 if (!store.records.some((r) => r.target === target)) {
-  store.records.push(predict(target));
+  store.records.push(makeRecord(target));
   changed++;
 }
 
@@ -64,7 +64,7 @@ store.records.sort((a, b) => b.target - a.target);
 // 변경이 있을 때만 갱신한다 — 매 실행마다 타임스탬프가 바뀌면 빈 커밋이 쌓인다.
 if (changed || !store.updatedAt) store.updatedAt = new Date().toISOString();
 
-// 채점 완료된 예측들의 누적 성적
+// 채점 완료된 예상번호의 누적 성적
 const done = store.records.filter((r) => r.result);
 store.summary = {
   graded: done.length,
@@ -77,4 +77,4 @@ store.summary = {
 };
 
 fs.writeFileSync(PREDS, JSON.stringify(store, null, 1));
-console.log(`${target}회 예측 대기 · 채점완료 ${done.length}건 · 변경 ${changed}건`);
+console.log(`${target}회 예상번호 대기 · 채점완료 ${done.length}건 · 변경 ${changed}건`);
