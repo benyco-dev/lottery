@@ -17,7 +17,12 @@ const { draws } = JSON.parse(fs.readFileSync(new URL("../site/data/draws.json", 
 const targets = draws.slice(-N);
 
 // 균등 대조군: 빈도 가중 없이(bias 0) 같은 구조 필터만 적용.
-const STRATS = [...RANGES.map((r) => ({ ...r, bias: 1 })), { key: "flat", label: "균등 대조군", size: null, bias: 0 }];
+const STRATS = [
+  { key: "unpopular", label: "비인기 가중", size: null, mode: "unpopular" },
+  { key: "frequency", label: "빈도 가중", size: null, mode: "frequency" },
+  { key: "flat", label: "균등 대조군", size: null, mode: "uniform" },
+  ...RANGES.slice(1).map((r) => ({ ...r, mode: "frequency" })),
+];
 
 const tally = new Map(STRATS.map((s) => [s.key, { sets: 0, match: 0, ranks: [0, 0, 0, 0, 0, 0], best: null }]));
 
@@ -28,7 +33,7 @@ for (const target of targets) {
     const t = tally.get(s.key);
     for (let k = 0; k < SEEDS; k++) {
       const seed = SEEDS === 1 ? target.e * 10 + i : target.e * 100003 + i * 997 + k;
-      const [set] = recommend(pool, { seed, sets: 1, bias: s.bias });
+      const [set] = recommend(pool, { seed, sets: 1, mode: s.mode });
       const g = grade(set.numbers, target.n, target.b);
       t.sets++;
       t.match += g.match;

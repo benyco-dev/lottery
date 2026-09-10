@@ -123,3 +123,19 @@ footer strong { color: var(--fg); }
 footer .src { margin-top: 8px; font-size: .75rem; }
 .err { color: var(--over); }
 .empty { color: var(--dim); font-size: .875rem; }
+
+/* 독립성 검정 표 */
+.tablewrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: .8125rem; white-space: nowrap; }
+.tbl th, .tbl td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.tbl th { color: var(--dim); font-weight: 500; font-size: .75rem; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; white-space: normal; }
+.tbl td { font-variant-numeric: tabular-nums; }
+.tbl .ok { color: var(--dim); }
+.tbl .sig { color: var(--over); font-weight: 600; }
+.verdict { font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; }
+.verdict.null { color: var(--win); }
+.verdict.some { color: var(--over); }
+.reroll { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.cell .fill.pop { background: var(--over); }
+.cell .fill.unpop { background: var(--under); }

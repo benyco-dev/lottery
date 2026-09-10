@@ -34,12 +34,21 @@ def get_json(url, **params):
 
 
 def slim(row):
-    """응답에서 당첨번호만 남긴다. 당첨금/당첨자수는 이 사이트에서 쓰지 않는다."""
+    """당첨번호 + 1~3등 당첨자 수 + 판매액만 남긴다.
+
+    당첨자 수는 상금 표시용이 아니라 번호 인기도 추정에 쓴다.
+    5개를 맞춘 티켓의 나머지 한 개가 보너스일 확률은 이론상 1/39로 고정이므로,
+    w2/(w2+w3) 가 1/39 보다 크면 그 보너스 번호를 사람들이 더 많이 골랐다는 뜻이다.
+    """
     return {
         "e": row["ltEpsd"],
         "d": row["ltRflYmd"],
         "n": sorted(row[f"tm{i}WnNo"] for i in range(1, 7)),
         "b": row["bnsWnNo"],
+        "w1": row["rnk1WnNope"],
+        "w2": row["rnk2WnNope"],
+        "w3": row["rnk3WnNope"],
+        "sales": row["rlvtEpsdSumNtslAmt"],
     }
 
 

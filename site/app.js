@@ -1,7 +1,7 @@
 /**
  * 화면 렌더링 전담. 통계·추천·채점 계산은 전부 analysis.js 에 있고 여기서는 그리기만 한다.
  */
-import { RANGES, RANK_LABEL, analyze, ballColor, recommend, sliceDraws } from "./analysis.js";
+import { RANGES, RANK_LABEL, analyze, ballColor, popularity, recommend, sliceDraws } from "./analysis.js";
 
 const $ = (id) => document.getElementById(id);
 const fmtDate = (ymd) => `${ymd.slice(0, 4)}.${ymd.slice(4, 6)}.${ymd.slice(6)}`;
@@ -62,6 +62,49 @@ function rankList(host, items, unit) {
     li.insertAdjacentHTML("beforeend", `<span>${unit(it)}</span>`);
     return li;
   }));
+}
+
+/** 독립성 검정 결과표. 매주 다시 계산된 값을 그대로 보여준다. */
+function renderIndependence(ind) {
+  const sig = ind.tests.filter((t) => t.p < ind.alpha);
+  const v = $("indepVerdict");
+  v.className = `verdict ${sig.length ? "some" : "null"}`;
+  v.textContent = sig.length
+    ? `${ind.tests.length}개 검정 중 ${sig.length}개가 유의합니다: ${sig.map((t) => t.name).join(", ")}`
+    : `${ind.tests.length}개 검정 전부 무의미 — 회차 사이에 이용할 만한 규칙이 없습니다`;
+  $("indepAlpha").textContent = `${ind.draws}회차 · 본페로니 보정 유의수준 α = ${ind.alpha}`;
+  $("indepTable").innerHTML =
+    `<thead><tr><th>검정</th><th>관측</th><th>기대</th><th>p</th><th>판정</th></tr></thead><tbody>` +
+    ind.tests.map((t) => `<tr><td>${t.name}<div class="k note" style="margin:2px 0 0">${t.desc}</div></td>` +
+      `<td>${t.obs}</td><td>${t.exp}</td><td>${t.p.toFixed(4)}</td>` +
+      `<td class="${t.p < ind.alpha ? "sig" : "ok"}">${t.p < ind.alpha ? "유의" : "무의미"}</td></tr>`).join("") +
+    `</tbody>`;
+}
+
+/** 번호별 인기지수. 1.0 이 평균이고, 낮을수록 사람들이 안 고르는 = 우리가 원하는 번호다. */
+function renderPopularity(pop) {
+  const dev = pop.slice(1).map((v) => v - 1);
+  const maxDev = Math.max(...dev.map(Math.abs), 0.01);
+  $("popGrid").replaceChildren(...dev.map((d, i) => {
+    const no = i + 1;
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.title = `${no}번 · 인기지수 ${pop[no].toFixed(3)} (평균 1.000) · ${d >= 0 ? "인기, 피할 번호" : "비인기, 고를 번호"}`;
+    cell.innerHTML = `<div class="track"><div class="fill ${d >= 0 ? "pop" : "unpop"}" style="height:${Math.max(2, (Math.abs(d) / maxDev) * 30)}px"></div></div>`;
+    cell.append(ball(no, { small: true }));
+    cell.insertAdjacentHTML("beforeend", `<div class="n">${pop[no].toFixed(2)}</div>`);
+    return cell;
+  }));
+
+  const band = (lo, hi) => {
+    const v = pop.slice(lo, hi + 1);
+    return v.reduce((a, b) => a + b, 0) / v.length;
+  };
+  $("popBands").innerHTML = [
+    ["1~12번", band(1, 12), "생일의 '월'. 가장 붐빔"],
+    ["13~31번", band(13, 31), "생일의 '일'"],
+    ["32~45번", band(32, 45), "생일에 없는 번호. 가장 한산"],
+  ].map(([k, v, s]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v.toFixed(3)}</div><div class="k">${s}</div></div>`).join("");
 }
 
 function renderStats(stats) {
@@ -148,9 +191,10 @@ function renderHistory(records) {
 }
 
 async function main() {
-  const [draws, preds] = await Promise.all([
+  const [draws, preds, ind] = await Promise.all([
     fetch("data/draws.json").then((r) => r.json()),
     fetch("data/predictions.json").then((r) => r.json()),
+    fetch("data/independence.json").then((r) => r.json()),
   ]);
 
   const latestDraw = draws.draws[draws.draws.length - 1];
@@ -164,13 +208,12 @@ async function main() {
   if (!pending) $("predSets").innerHTML = `<p class="empty">다음 회차 예측이 아직 생성되지 않았습니다.</p>`;
   renderScorecard(preds.records, pending?.target ?? draws.latest + 1);
   renderHistory(preds.records);
+  renderIndependence(ind);
+  renderPopularity(popularity(draws.draws));
 
-  let active = RANGES[0];
   const select = (range) => {
-    active = range;
     [...$("tabs").children].forEach((b) => b.setAttribute("aria-selected", String(b.dataset.key === range.key)));
     renderStats(analyze(sliceDraws(draws.draws, range.size)));
-    $("rerollSets").replaceChildren();
   };
   $("tabs").replaceChildren(...RANGES.map((r) => {
     const b = document.createElement("button");
@@ -181,8 +224,9 @@ async function main() {
     b.onclick = () => select(r);
     return b;
   }));
-  $("reroll").onclick = () => renderSets($("rerollSets"),
-    recommend(sliceDraws(draws.draws, active.size), { seed: (Math.random() * 2 ** 31) | 0 }));
+  // 추천은 항상 전체 이력 기준이다 — 인기지수는 구간을 자르면 표본이 모자란다.
+  $("reroll").onclick = () =>
+    renderSets($("rerollSets"), recommend(draws.draws, { seed: (Math.random() * 2 ** 31) | 0 }));
 
   select(RANGES[0]);
   $("main").hidden = false;

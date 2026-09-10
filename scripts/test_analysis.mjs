@@ -1,7 +1,7 @@
 /** analysis.js 자기검증. node scripts/test_analysis.mjs */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { analyze, grade, gradeRecord, passesFilters, recommend, RANGES, sliceDraws } from "../site/analysis.js";
+import { MAX_BIRTHDAY_MONTH, analyze, grade, gradeRecord, passesFilters, popularity, recommend, RANGES, sliceDraws, weights } from "../site/analysis.js";
 
 const { draws, latest } = JSON.parse(fs.readFileSync(new URL("../site/data/draws.json", import.meta.url)));
 
@@ -30,6 +30,29 @@ for (const r of RANGES) {
   assert.ok(s.byNo.every((b) => b.gap >= 0 && b.gap <= s.count));
 }
 
+// 인기지수
+const pop = popularity(draws);
+assert.equal(pop.length, 46);
+assert.ok(pop.slice(1).every((v) => v > 0.5 && v < 2), `인기지수가 범위를 벗어남: ${pop.slice(1)}`);
+const bonusSeen = new Set(draws.map((d) => d.b));
+for (let nlow = 1; nlow <= 45; nlow++) {
+  if (!bonusSeen.has(nlow)) assert.equal(pop[nlow], 1, `보너스로 안 나온 번호는 1이어야 함: ${nlow}`);
+}
+// 중앙값 기반이라 이상 회차 하나에 흔들리지 않아야 한다 (1057회는 2등이 664명으로 평상시의 9배)
+const spiked = popularity(draws.map((d) => (d.e === 1057 ? { ...d, w2: d.w2 * 20 } : d)));
+assert.ok(Math.abs(spiked[draws.find((d) => d.e === 1057).b] - pop[draws.find((d) => d.e === 1057).b]) < 0.05,
+  "이상 회차 하나가 인기지수를 끌고 감 — 중앙값이 아니라 통합비율을 쓰고 있음");
+
+// 가중치 모드
+assert.ok(weights(draws, "uniform").slice(1).every((v) => v === 1));
+const wu = weights(draws, "unpopular");
+const least = pop.indexOf(Math.min(...pop.slice(1)));
+const most = pop.indexOf(Math.max(...pop.slice(1)));
+assert.ok(wu[least] > wu[most], "비인기 번호가 더 높은 가중치를 받아야 함");
+
+// 혼잡 필터: 1~12 를 3개 이상 포함하면 탈락
+assert.equal(passesFilters([1, 2, 3, 20, 30, 40], analyze(draws)), false, "1~12 3개짜리가 통과함");
+
 // 추천: 개수·중복·필터·재현성
 const stats = analyze(draws);
 const a = recommend(draws, { seed: 1241 });
@@ -37,6 +60,8 @@ assert.equal(a.length, 5);
 assert.equal(new Set(a.map((r) => r.numbers.join())).size, 5, "세트가 중복됨");
 assert.ok(a.every((r) => r.numbers.length === 6 && new Set(r.numbers).size === 6));
 assert.ok(a.every((r) => passesFilters(r.numbers, stats)), "필터를 통과하지 못한 세트");
+assert.ok(a.every((r) => r.numbers.filter((v) => v <= 12).length <= MAX_BIRTHDAY_MONTH),
+  "추천 세트가 1~12 제한을 어김");
 assert.deepEqual(recommend(draws, { seed: 1241 }), a, "같은 시드인데 결과가 다름");
 assert.notDeepEqual(recommend(draws, { seed: 1242 }), a, "시드가 달라도 결과가 같음");
 
