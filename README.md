@@ -231,7 +231,7 @@ site/data/*.json          데이터 계약. 모듈 간 유일한 인터페이스
 ## 로컬 실행
 
 ```bash
-python3 scripts/fetch_draws.py    # 전 회차 수집 (약 2분)
+python3 scripts/fetch_draws.py    # 첫 실행은 전량 수집(약 2분), 이후는 새 회차만
 python3 scripts/test_draws.py     # 공식 통계와 대조
 node scripts/test_analysis.mjs    # 도메인 로직 검증
 node scripts/update.mjs           # 채점 + 다음 회차 예상번호
