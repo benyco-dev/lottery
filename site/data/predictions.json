@@ -1,0 +1,111 @@
+{
+ "records": [
+  {
+   "target": 1241,
+   "basedOn": 1240,
+   "drawDate": "20260912",
+   "createdAt": "2026-09-10",
+   "sets": [
+    {
+     "range": "all",
+     "label": "전체",
+     "numbers": [
+      2,
+      16,
+      23,
+      27,
+      33,
+      35
+     ],
+     "sum": 136,
+     "odd": 4
+    },
+    {
+     "range": "r500",
+     "label": "최근 500회",
+     "numbers": [
+      14,
+      15,
+      18,
+      20,
+      31,
+      41
+     ],
+     "sum": 139,
+     "odd": 3
+    },
+    {
+     "range": "r250",
+     "label": "최근 250회",
+     "numbers": [
+      4,
+      11,
+      14,
+      37,
+      40,
+      42
+     ],
+     "sum": 148,
+     "odd": 2
+    },
+    {
+     "range": "r100",
+     "label": "최근 100회",
+     "numbers": [
+      3,
+      12,
+      13,
+      24,
+      30,
+      42
+     ],
+     "sum": 124,
+     "odd": 2
+    },
+    {
+     "range": "r50",
+     "label": "최근 50회",
+     "numbers": [
+      2,
+      6,
+      15,
+      32,
+      41,
+      43
+     ],
+     "sum": 139,
+     "odd": 3
+    }
+   ],
+   "result": null
+  }
+ ],
+ "updatedAt": "2026-09-10T01:55:52.329Z",
+ "summary": {
+  "graded": 0,
+  "sets": 0,
+  "wins": 0,
+  "byRank": [
+   {
+    "rank": 1,
+    "count": 0
+   },
+   {
+    "rank": 2,
+    "count": 0
+   },
+   {
+    "rank": 3,
+    "count": 0
+   },
+   {
+    "rank": 4,
+    "count": 0
+   },
+   {
+    "rank": 5,
+    "count": 0
+   }
+  ]
+ }
+}

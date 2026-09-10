@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로또 6/45 회차 통계</title>
+<meta name="description" content="동행복권 로또 6/45 전 회차 당첨번호를 5개 구간으로 나눠 분석하고, 과거 분포를 닮은 번호 조합을 뽑아 다음 회차에 채점합니다.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23fbc400'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>로또 6/45 회차 통계</h1>
+  <p class="sub" id="coverage">불러오는 중…</p>
+</header>
+
+<main id="main" hidden>
+
+  <section class="card scorecard" id="scorecard">
+    <h2 class="eyebrow">지난 회차 채점</h2>
+    <div id="scoreBody"></div>
+  </section>
+
+  <section class="card">
+    <h2 class="eyebrow">이번 회차 예측 <span class="tag" id="predTarget"></span></h2>
+    <p class="note">분석 구간 5개에서 각각 한 세트씩. 시드가 회차번호에 묶여 있어 추첨 전에 기록되고 이후 바뀌지 않습니다.</p>
+    <div id="predSets" class="sets"></div>
+  </section>
+
+  <nav class="tabs" id="tabs" aria-label="분석 구간"></nav>
+
+  <section class="card">
+    <h2 class="eyebrow">구간 요약</h2>
+    <div class="metrics" id="metrics"></div>
+  </section>
+
+  <section class="card">
+    <h2 class="eyebrow">번호별 출현</h2>
+    <p class="note">막대는 균등분포 기대치 대비 편차입니다. <span class="sw over"></span> 많이 나옴 · <span class="sw under"></span> 적게 나옴</p>
+    <div class="grid" id="numberGrid"></div>
+  </section>
+
+  <div class="row">
+    <section class="card">
+      <h2 class="eyebrow">많이 나온 번호</h2>
+      <ol class="rank" id="hot"></ol>
+    </section>
+    <section class="card">
+      <h2 class="eyebrow">적게 나온 번호</h2>
+      <ol class="rank" id="cold"></ol>
+    </section>
+    <section class="card">
+      <h2 class="eyebrow">오래 안 나온 번호</h2>
+      <ol class="rank" id="overdue"></ol>
+    </section>
+  </div>
+
+  <div class="row">
+    <section class="card">
+      <h2 class="eyebrow">10단위 구간 분포</h2>
+      <div class="bars" id="decades"></div>
+    </section>
+    <section class="card">
+      <h2 class="eyebrow">세트당 홀수 개수</h2>
+      <div class="bars" id="oddDist"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2 class="eyebrow">이 구간 기준으로 더 뽑기</h2>
+    <p class="note">위 예측과 같은 방식이되 시드만 새로 잡습니다. 기록에는 남지 않습니다.</p>
+    <button id="reroll" type="button">5세트 뽑기</button>
+    <div id="rerollSets" class="sets"></div>
+  </section>
+
+  <section class="card">
+    <h2 class="eyebrow">예측 기록</h2>
+    <div id="history"></div>
+  </section>
+
+  <footer>
+    <p><strong>로또는 매 회차 독립시행입니다.</strong> 과거 번호로 다음 번호를 맞힐 수는 없습니다.
+    여기서 뽑는 조합은 예측이 아니라 <em>과거 당첨 조합의 분포와 닮은 무작위 조합</em>이고, 어떤 조합이든 1등 확률은 8,145,060분의 1로 같습니다.</p>
+    <p class="src">데이터 출처: 동행복권 · <span id="updated"></span></p>
+  </footer>
+</main>
+
+<p id="error" class="card err" hidden></p>
+<script type="module" src="app.js"></script>
+</body>
+</html>

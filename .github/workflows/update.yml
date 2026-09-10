@@ -1,0 +1,59 @@
+name: 회차 갱신 및 배포
+
+# 로또 추첨은 매주 토요일 20:45 KST. 결과 반영을 기다렸다가 일요일 새벽에 돈다.
+on:
+  schedule:
+    - cron: "30 16 * * 6" # 토 16:30 UTC = 일 01:30 KST
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write # Workload Identity Federation 용. 서비스 계정 키를 저장하지 않는다.
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 당첨번호 수집
+        run: python3 scripts/fetch_draws.py
+
+      - name: 수집 데이터 검증 (동행복권 공식 통계와 대조)
+        run: python3 scripts/test_draws.py
+
+      - name: 통계·추천·채점 로직 검증
+        run: node scripts/test_analysis.mjs
+
+      - name: 예측 채점 및 다음 회차 예측 생성
+        run: node scripts/update.mjs
+
+      - name: 변경분 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/data
+          git diff --staged --quiet || git commit -m "chore: 회차 데이터 및 예측 갱신"
+          git push
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Cloud Storage 배포
+        run: |
+          gcloud storage rsync site "gs://${{ secrets.GCS_BUCKET }}" \
+            --recursive --delete-unmatched-destination-objects \
+            --cache-control="public, max-age=300"
