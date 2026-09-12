@@ -1,6 +1,80 @@
 {
  "records": [
   {
+   "target": 1242,
+   "basedOn": 1241,
+   "drawDate": "20260919",
+   "createdAt": "2026-09-12",
+   "sets": [
+    {
+     "label": "세트 1",
+     "numbers": [
+      6,
+      17,
+      18,
+      26,
+      31,
+      44
+     ],
+     "sum": 142,
+     "odd": 2
+    },
+    {
+     "label": "세트 2",
+     "numbers": [
+      3,
+      12,
+      13,
+      24,
+      27,
+      33
+     ],
+     "sum": 112,
+     "odd": 4
+    },
+    {
+     "label": "세트 3",
+     "numbers": [
+      5,
+      6,
+      13,
+      18,
+      26,
+      39
+     ],
+     "sum": 107,
+     "odd": 3
+    },
+    {
+     "label": "세트 4",
+     "numbers": [
+      1,
+      6,
+      13,
+      28,
+      39,
+      40
+     ],
+     "sum": 127,
+     "odd": 3
+    },
+    {
+     "label": "세트 5",
+     "numbers": [
+      3,
+      13,
+      15,
+      24,
+      30,
+      45
+     ],
+     "sum": 130,
+     "odd": 4
+    }
+   ],
+   "result": null
+  },
+  {
    "target": 1241,
    "basedOn": 1240,
    "drawDate": "20260912",
@@ -72,13 +146,108 @@
      "odd": 2
     }
    ],
-   "result": null
+   "result": {
+    "winning": [
+     7,
+     13,
+     16,
+     23,
+     24,
+     43
+    ],
+    "bonus": 9,
+    "date": "20260912",
+    "sets": [
+     {
+      "label": "세트 1",
+      "numbers": [
+       19,
+       21,
+       24,
+       26,
+       33,
+       44
+      ],
+      "sum": 167,
+      "odd": 3,
+      "match": 1,
+      "hitBonus": false,
+      "rank": 0
+     },
+     {
+      "label": "세트 2",
+      "numbers": [
+       11,
+       17,
+       21,
+       26,
+       27,
+       38
+      ],
+      "sum": 140,
+      "odd": 4,
+      "match": 0,
+      "hitBonus": false,
+      "rank": 0
+     },
+     {
+      "label": "세트 3",
+      "numbers": [
+       4,
+       17,
+       24,
+       26,
+       27,
+       31
+      ],
+      "sum": 129,
+      "odd": 3,
+      "match": 1,
+      "hitBonus": false,
+      "rank": 0
+     },
+     {
+      "label": "세트 4",
+      "numbers": [
+       6,
+       13,
+       16,
+       27,
+       28,
+       41
+      ],
+      "sum": 131,
+      "odd": 3,
+      "match": 2,
+      "hitBonus": false,
+      "rank": 0
+     },
+     {
+      "label": "세트 5",
+      "numbers": [
+       6,
+       7,
+       12,
+       17,
+       24,
+       34
+      ],
+      "sum": 100,
+      "odd": 2,
+      "match": 2,
+      "hitBonus": false,
+      "rank": 0
+     }
+    ],
+    "bestRank": 0,
+    "bestMatch": 2
+   }
   }
  ],
- "updatedAt": "2026-09-10T02:33:31.320Z",
+ "updatedAt": "2026-09-12T11:48:29.338Z",
  "summary": {
-  "graded": 0,
-  "sets": 0,
+  "graded": 1,
+  "sets": 5,
   "wins": 0,
   "byRank": [
    {
