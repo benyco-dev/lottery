@@ -14,6 +14,15 @@ function ball(n, { small, missed, bonus } = {}) {
   return el;
 }
 
+/**
+ * 진입 애니메이션 순서를 --i 로 넘긴다. 지연 계산은 CSS 가 한다.
+ * 선택자 그룹마다 따로 번호를 매겨야 .cell 안의 .ball 이 인덱스를 건너뛰지 않는다.
+ * 렌더마다 다시 실행되므로 '다시 뽑기'와 탭 전환에서도 같은 등장이 재생된다.
+ */
+function stagger(host, groups = [".set", ".ball", ".bar", ".cell", ".metric", ".p", "li"]) {
+  for (const g of groups) host.querySelectorAll(g).forEach((el, i) => el.style.setProperty("--i", String(i)));
+}
+
 function balls(nums, opts) {
   const f = document.createDocumentFragment();
   nums.forEach((n) => f.append(ball(n, opts)));
@@ -43,6 +52,7 @@ function setRow(set, hit) {
 
 function renderSets(host, sets, hit) {
   host.replaceChildren(...sets.map((s) => setRow(s, hit)));
+  stagger(host);
 }
 
 function bars(host, rows) {
@@ -53,6 +63,7 @@ function bars(host, rows) {
     el.innerHTML = `<span>${r.label}</span><span class="t"><span class="f" style="width:${(r.value / max) * 100}%"></span></span><span class="v">${r.text}</span>`;
     return el;
   }));
+  stagger(host);
 }
 
 function rankList(host, items, unit) {
@@ -62,6 +73,7 @@ function rankList(host, items, unit) {
     li.insertAdjacentHTML("beforeend", `<span>${unit(it)}</span>`);
     return li;
   }));
+  stagger(host);
 }
 
 /** 번호쌍 목록 한 줄. arrow 를 주면 a → b 방향으로 표시한다. */
@@ -100,6 +112,7 @@ function renderAssociations(assoc, scores) {
     cell.insertAdjacentHTML("beforeend", `<div class="n">${v >= 0 ? "+" : ""}${v.toFixed(1)}</div>`);
     return cell;
   }));
+  [$("modelParts"), $("topPairs"), $("topTrans"), $("scoreGrid")].forEach((h) => stagger(h));
 }
 
 function renderStats(stats) {
@@ -122,12 +135,14 @@ function renderStats(stats) {
     cell.insertAdjacentHTML("beforeend", `<div class="n">${b.count}</div>`);
     return cell;
   }));
+  stagger($("metrics"));
+  stagger($("numberGrid"));
 
   rankList($("hot"), stats.hot, (i) => `${i.count}회`);
   rankList($("cold"), stats.cold, (i) => `${i.count}회`);
   rankList($("overdue"), stats.overdue, (i) => (i.gap === 0 ? "직전 회차" : `${i.gap}회 전`));
 
-  bars($("decades"), ["1–10", "11–20", "21–30", "31–40", "41–45"].map((label, i) => ({
+  bars($("decades"), ["1-10", "11-20", "21-30", "31-40", "41-45"].map((label, i) => ({
     label, value: stats.decades[i], text: `${stats.decades[i]}회`,
   })));
   bars($("oddDist"), stats.oddCounts.map((v, i) => ({
@@ -146,12 +161,13 @@ function renderScorecard(records, nextTarget) {
   const { result } = rec;
   const won = result.bestRank > 0;
   body.innerHTML = `<p class="headline${won ? " win" : ""}">${
-    won ? `${rec.target}회 ${RANK_LABEL[result.bestRank]} 당첨` : `${rec.target}회 낙첨 — 최고 ${result.bestMatch}개 일치`
+    won ? `${rec.target}회 ${RANK_LABEL[result.bestRank]} 당첨` : `${rec.target}회 낙첨, 최고 ${result.bestMatch}개 일치`
   }</p><p class="note" style="margin:0">${fmtDate(result.date)} 추첨</p><div class="winning"></div>`;
   const w = body.querySelector(".winning");
   w.append(balls(result.winning));
   w.insertAdjacentHTML("beforeend", `<span class="plus">+ 보너스</span>`);
   w.append(ball(result.bonus, { bonus: true }));
+  stagger(w);
   const list = document.createElement("div");
   list.className = "sets";
   renderSets(list, result.sets, result);

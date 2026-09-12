@@ -1,5 +1,5 @@
 /*
- * 로또 6/45 — 흰색에서 연두로 번지는 그라데이션 캔버스 위에 반투명 유리 카드.
+ * 로또 6/45 - 흰색에서 연두로 번지는 그라데이션 캔버스 위에 반투명 유리 카드.
  *
  * 모양 규칙 (전 페이지 고정):
  *   카드 20px · 내부 블록 14px · 버튼/탭 999px(알약) · 마이크로 칩 6px
@@ -70,13 +70,15 @@ body {
   overflow-wrap: break-word;
 }
 
-/* 그라데이션 캔버스. 고정 레이어라 스크롤 중 다시 그리지 않는다. */
+/* 그라데이션 캔버스. 고정 레이어라 스크롤 중 다시 그리지 않는다.
+   inset 을 음수로 둬서 패럴랙스로 밀려도 가장자리가 드러나지 않게 한다. */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -18%;
   z-index: -1;
   pointer-events: none;
+  will-change: transform;
   background:
     radial-gradient(78% 52% at 86% 4%, rgba(148, 209, 79, 0.30), transparent 62%),
     radial-gradient(64% 44% at 4% 26%, rgba(186, 231, 130, 0.26), transparent 64%),
@@ -89,6 +91,26 @@ body::before {
       radial-gradient(78% 52% at 86% 4%, rgba(124, 193, 66, 0.22), transparent 62%),
       radial-gradient(64% 44% at 4% 26%, rgba(90, 150, 50, 0.18), transparent 64%),
       radial-gradient(130% 86% at 50% -14%, #17240f 0%, #101710 38%, #0a0e0a 72%);
+  }
+}
+
+/* 위에서 천천히 흐르는 블롭 레이어. transform 만 움직이므로 합성만 다시 된다. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -35%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(34% 27% at 26% 30%, rgba(124, 193, 66, 0.26), transparent 70%),
+    radial-gradient(29% 24% at 74% 64%, rgba(168, 227, 100, 0.22), transparent 72%);
+}
+
+@media (prefers-color-scheme: dark) {
+  body::after {
+    background:
+      radial-gradient(34% 27% at 26% 30%, rgba(124, 193, 66, 0.14), transparent 70%),
+      radial-gradient(29% 24% at 74% 64%, rgba(90, 160, 50, 0.13), transparent 72%);
   }
 }
 
@@ -113,6 +135,10 @@ h1 {
   padding: 24px;
   margin: 16px 0;
   box-shadow: var(--shadow);
+  transition: transform .4s cubic-bezier(.16, 1, .3, 1), box-shadow .4s cubic-bezier(.16, 1, .3, 1);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .card:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(40,62,20,.06), 0 20px 44px -20px rgba(40,62,20,.26); }
 }
 .row { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 16px 0; }
 .row .card { margin: 0; }
@@ -155,6 +181,10 @@ h1 {
   background: var(--inset);
   border: 1px solid var(--line);
   border-radius: var(--r-block);
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1), border-color .3s, background-color .3s;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .set:hover { transform: translateY(-2px); border-color: var(--accent-soft); }
 }
 .set .label { width: 72px; flex: none; color: var(--dim); font-size: .75rem; }
 .set .meta { margin-left: auto; color: var(--dim); font-size: .75rem; font-variant-numeric: tabular-nums; }
@@ -244,8 +274,34 @@ footer .src { margin-top: 8px; font-size: .75rem; }
 .err { color: #b3261e; }
 .empty { color: var(--dim); font-size: .875rem; }
 
-/* 스크롤 진입 시 카드가 떠오른다. 스크롤 이벤트 리스너 없이 CSS 타임라인만 쓴다. */
+/* ── 움직임 ────────────────────────────────────────────────────────────────
+   전부 transform 과 opacity 만 건드리고, 스크롤 리스너는 쓰지 않는다.
+   prefers-reduced-motion 이면 아래 블록이 통째로 적용되지 않는다. */
+
+@keyframes rise { from { opacity: 0; transform: translateY(26px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes canvas-pan { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -8%, 0); } }
+@keyframes drift {
+  from { transform: translate3d(-4%, -2%, 0) rotate(0deg) scale(1); }
+  to   { transform: translate3d(5%, 4%, 0) rotate(7deg) scale(1.12); }
+}
+/* 볼이 하나씩 튀어나온다. 추첨 순서를 흉내내고, '다시 뽑기'의 응답이기도 하다. */
+@keyframes ball-in {
+  from { opacity: 0; transform: translateY(9px) scale(.55); }
+  60%  { transform: translateY(0) scale(1.08); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes fill-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes item-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: no-preference) {
+  /* 배경: 아주 느린 블롭 이동 + 스크롤에 따른 캔버스 패럴랙스 */
+  body::after { animation: drift 38s cubic-bezier(.45, 0, .55, 1) infinite alternate; }
+  @supports (animation-timeline: scroll()) {
+    body::before { animation: canvas-pan linear both; animation-timeline: scroll(root block); }
+  }
+
+  /* 섹션은 스크롤에 들어오면서 떠오른다 */
   @supports (animation-timeline: view()) {
     main > section, main > .row, main > nav {
       animation: rise linear both;
@@ -253,10 +309,32 @@ footer .src { margin-top: 8px; font-size: .75rem; }
       animation-range: entry 0% entry 56%;
     }
   }
-}
-@keyframes rise {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: none; }
+
+  /* 요소 단위 등장. 순서(--i)는 app.js 의 stagger() 가 넣는다. */
+  /* 행이 먼저 자리를 잡고 그 위로 볼이 떨어진다. 행 없이 볼만 비면 빈 껍데기로 보인다. */
+  .sets .set {
+    animation: item-in .45s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  .ball {
+    animation: ball-in .5s cubic-bezier(.34, 1.56, .64, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 18ms);
+  }
+  .bar .f {
+    transform-origin: left center;
+    animation: bar-grow .8s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 55ms + 60ms);
+  }
+  .cell .fill {
+    transform-origin: bottom center;
+    animation: fill-grow .68s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 13ms);
+  }
+  .metric, .pairs .p, .rank li {
+    animation: item-in .5s cubic-bezier(.16, 1, .3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 42ms);
+  }
+  .scorecard .headline { animation: item-in .6s cubic-bezier(.16, 1, .3, 1) backwards; }
 }
 
 /* 좁은 화면: 세트 한 줄에 볼 6개가 들어가도록 라벨을 윗줄로 뺀다. */
