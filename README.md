@@ -1,5 +1,7 @@
 # Google Cloud Storage 정적 호스팅
 
+[![Featured on Pro-v](https://pro-v.co.kr/static/badge.svg)](https://pro-v.co.kr/p/1)
+
 서버 프로세스 없이 **Cloud Storage 버킷 하나로 웹사이트를 운영**하고,
 GitHub Actions가 매주 데이터를 갱신해 자동 배포하는 구성.
 
